@@ -40,7 +40,7 @@ export const UserDataProvider = ({
     if(socketRef.current) {
       return socketRef.current;
     }
-    const ws = new WebSocket("ws://localhost:8080");
+    const ws = new WebSocket(import.meta.env.VITE_WS_URL);
 
     ws.onopen = () => {
       console.log("socket connected");

@@ -1,11 +1,28 @@
 import { WebSocketServer, WebSocket } from "ws";
-const wss = new WebSocketServer({ port: 8080 });
+import dotenv from "dotenv";
 
-const socketToUsername = new Map<WebSocket, String>();
-const socketToRoomId = new Map<WebSocket, Number>();
-const roomToUsers = new Map<Number, Set<WebSocket>>();
+dotenv.config();
+const PORT = process.env.PORT || 8080;
+
+const allowed = [process.env.FRONTEND_URL].filter(Boolean) as string[];
+
+const wss = new WebSocketServer({
+  port: Number(PORT),
+
+  verifyClient: ({ origin }: { origin?: string }) => {
+    return !!origin && allowed.includes(origin);
+  },
+});
+
+console.log(`Websocket server is running at PORT: ${PORT}`);
+
+const socketToUsername = new Map<WebSocket, string>();
+const socketToRoomId = new Map<WebSocket, number>();
+const roomToUsers = new Map<number, Set<WebSocket>>();
 
 wss.on("connection", (socket) => {
+  console.log("Client connected");
+
   socket.on("message", (message) => {
     let parsedMessage;
 
@@ -23,7 +40,7 @@ wss.on("connection", (socket) => {
       return console.error("Type and Payload is not present in the message");
     }
 
-    if (parsedMessage.type == "join") {
+    if (parsedMessage.type === "join") {
       const roomId = parsedMessage.payload.roomId;
       const username = parsedMessage.payload.username;
 
@@ -38,13 +55,9 @@ wss.on("connection", (socket) => {
         roomToUsers.set(roomId, new Set());
       }
 
-      const sockets = roomToUsers.get(roomId);
+      const sockets = roomToUsers.get(roomId)!;
 
-      if (!sockets) {
-        return console.error("No users present in the room");
-      } else {
-        sockets.add(socket);
-      }
+      sockets.add(socket);
 
       const joinMessage = {
         id: crypto.randomUUID(),
@@ -57,7 +70,7 @@ wss.on("connection", (socket) => {
       });
     }
 
-    if (parsedMessage.type == "chat") {
+    if (parsedMessage.type === "chat") {
       const chatMessage = parsedMessage.payload.message;
 
       if (chatMessage === undefined) {
@@ -98,21 +111,15 @@ wss.on("connection", (socket) => {
     const roomId = socketToRoomId.get(socket);
     const username = socketToUsername.get(socket);
 
-    if (roomId === undefined) {
-      return console.error("User has no valid room");
-    }
+    if (roomId === undefined) return;
 
-    if (username === undefined) {
-      return console.error("Username not defined");
-    }
+    if (username === undefined) return;
 
     const sockets = roomToUsers.get(roomId);
 
-    if (!sockets) {
-      return console.error("No users present inside the room");
-    } else {
-      sockets.delete(socket);
-    }
+    if (!sockets) return;
+
+    sockets.delete(socket);
 
     if (sockets.size == 0) {
       roomToUsers.delete(roomId);
@@ -132,5 +139,9 @@ wss.on("connection", (socket) => {
         socket.send(JSON.stringify(leaveMessage));
       });
     }
+  });
+
+  socket.on("error", (err) => {
+    console.error(err);
   });
 });
